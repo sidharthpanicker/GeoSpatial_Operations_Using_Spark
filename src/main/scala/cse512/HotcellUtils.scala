@@ -47,5 +47,29 @@ object HotcellUtils {
     return calendar.get(Calendar.DAY_OF_MONTH)
   }
 
-  // YOU NEED TO CHANGE THIS PART
+
+  
+  def calculateSpacialWeight(pickInfoMap: scala.collection.mutable.Map[(String, String, String), Double], x: Int, y:Int, t:Int): Double = {
+    var xx: Integer = 0
+    var yy: Integer= 0
+    var tt: Integer = 0
+    var result: Double = 0
+    for (lat <- x-1 to x+1; lon <- y-1 to y+1; timestamp <- t-1 to t+1) {
+      val Xj:Double = pickInfoMap.getOrElse((lat.toString, lon.toString, timestamp.toString), 0.0)
+      result += Xj
+    }
+    return result
+  }
+
+  // To calculate out the z-value
+  def calculateGScore (spacialWeight: Double, squaredX: Double, totalX: Double, numCells: Double) : Double =
+  {
+    // TODO change averageX to a constant? To avoid calculate it every time
+    val averageX = totalX/numCells
+    val S = math.sqrt(squaredX/numCells - averageX * averageX)
+    val denominator = S*math.sqrt((numCells*27 -27*27)/(numCells-1))
+    val numerator = spacialWeight - averageX*27
+    return numerator/denominator
+  }
+
 }

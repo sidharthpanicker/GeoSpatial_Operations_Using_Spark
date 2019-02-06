@@ -4,6 +4,9 @@ import org.apache.log4j.{Level, Logger}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.types.{DoubleType, IntegerType, StructField, StructType}
+import scala.collection.JavaConversions._
 
 object HotcellAnalysis {
   Logger.getLogger("org.spark_project").setLevel(Level.WARN)
@@ -30,6 +33,7 @@ def runHotcellAnalysis(spark: SparkSession, pointPath: String): DataFrame =
     )))
   pickupInfo = spark.sql("select CalculateX(nyctaxitrips._c5),CalculateY(nyctaxitrips._c5), CalculateZ(nyctaxitrips._c1) from nyctaxitrips")
   var newCoordinateName = Seq("x", "y", "z")
+  import spark.implicits._
   pickupInfo = pickupInfo.toDF(newCoordinateName:_*)
   pickupInfo.show()
 
@@ -42,8 +46,34 @@ def runHotcellAnalysis(spark: SparkSession, pointPath: String): DataFrame =
   val maxZ = 31
   val numCells = (maxX - minX + 1)*(maxY - minY + 1)*(maxZ - minZ + 1)
 
-  // YOU NEED TO CHANGE THIS PART
+  val cellInfo = pickupInfo.collect()
+  var pickInfoMap = scala.collection.mutable.Map[(String, String, String), Double]()
 
-  return pickupInfo // YOU NEED TO CHANGE THIS PART
+  for (cellGrid <- cellInfo) {
+  if(pickInfoMap.contains(cellGrid.get(0).toString, cellGrid.get(1).toString, cellGrid.get(2).toString)) {
+    pickInfoMap((cellGrid.get(0).toString, cellGrid.get(1).toString, cellGrid.get(2).toString)) += 1
+  }
+  else {
+    pickInfoMap += ((cellGrid.get(0).toString, cellGrid.get(1).toString, cellGrid.get(2).toString) -> 1)
+  }
+}
+
+  val mean = pickInfoMap.values.sum / numCells
+  val total = pickInfoMap.values.sum
+  var square : Double = 0.0
+  pickInfoMap.values.foreach{(value) => square += math.pow(value, 2)}
+
+  var hotcellList  : List[(Int, Int, Int, Double)] = List()
+  for ( x <- -7450 to -7370; y <- 4050 to 4090; t <- minZ to maxZ) {
+    val spacialWeight = HotcellUtils.calculateSpacialWeight(pickInfoMap, x, y, t)
+    val g_score = HotcellUtils.calculateGScore(spacialWeight, square,total, numCells)
+    hotcellList = hotcellList:+(x,y,t,g_score)
+  }
+  
+  var hotCellDF = hotcellList.toDF("X", "Y", "Z", "G_SCORE")
+  hotCellDF.createOrReplaceTempView("hotCellResult")
+  hotCellDF = spark.sql("SELECT X,Y,Z FROM hotCellResult order by G_SCORE DESC")
+  return hotCellDF
+
 }
 }
